@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: droidj-server
+    env: node
+    buildCommand: apt-get update && apt-get install -y default-jdk && npm install
+    startCommand: node index.js
