@@ -197,8 +197,8 @@ Deploy easily using:
 
 Made with passion by **Divyansh Goyal**
 
-* GitHub: https://github.com/YOUR_USERNAME
-* Portfolio: https://YOUR_DOMAIN
+* GitHub: https://github.com/vinksgoyal
+* Portfolio: https://divyanshgoyal.dev
 
 ---
 
