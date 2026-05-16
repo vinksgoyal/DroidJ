@@ -446,6 +446,10 @@ export default function App() {
   // Scroll output to bottom
   useEffect(() => { if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [output]);
 
+useEffect(() => {
+  fetch("https://droidj-5op8.onrender.com/").catch(() => {});
+}, []);
+    
   // Auto-save with debounce
   function handleCodeChange(val) {
     const v = val || "";
