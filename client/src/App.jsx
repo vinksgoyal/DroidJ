@@ -1,0 +1,826 @@
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from "react";
+import "./App.css";
+
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+
+const API = "http://localhost:3001";
+
+// ─── Icons (inline SVG components) ───────────────────────────────────────────
+const Ic = {
+  Run: () => <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>,
+  Stop: () => <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>,
+  Save: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
+  Files: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+  Plus: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  Trash: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>,
+  Code: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>,
+  Term: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>,
+  Moon: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>,
+  Sun: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>,
+  Close: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
+  Clear: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/></svg>,
+  Font: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><text x="4" y="18" style={{fontSize:"14px",fontFamily:"serif",stroke:"currentColor",strokeWidth:"1"}}>A</text><text x="13" y="16" style={{fontSize:"10px",fontFamily:"serif",stroke:"currentColor",strokeWidth:"1"}}>a</text></svg>,
+  Share: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>,
+  Copy: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>,
+  Check: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>,
+  History: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>,
+  Info: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+  Zoom: (p) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>{p.plus ? <line x1="11" y1="8" x2="11" y2="14"/> : null}{p.plus ? <line x1="8" y1="11" x2="14" y2="11"/> : <line x1="8" y1="11" x2="14" y2="11"/>}</svg>,
+  Home: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2h-5v-8H9v8H5a2 2 0 01-2-2z"/></svg>,
+  Project: () => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+};
+
+// ─── Storage ──────────────────────────────────────────────────────────────────
+const SK = { files: "dj_files3", active: "dj_active3", theme: "dj_theme", fontSize: "dj_fs", history: "dj_hist" };
+const get = (k, def) => { try { const v = localStorage.getItem(k); return v !== null ? JSON.parse(v) : def; } catch { return def; } };
+const set = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+// ─── Error translator ─────────────────────────────────────────────────────────
+function translateError(raw) {
+  if (!raw) return raw;
+  return raw
+    .replace(/error: ';' expected/g, "error: Missing semicolon ';' at end of line")
+    .replace(/error: cannot find symbol/g, "error: Variable or method not found — check spelling")
+    .replace(/error: reached end of file while parsing/g, "error: Missing closing brace '}' — check your brackets")
+    .replace(/error: incompatible types/g, "error: Wrong data type — e.g. putting text where a number is expected")
+    .replace(/error: class .+ is public, should be declared in a file named/g, (m) => m + " — class name must match filename")
+    .replace(/error: variable .+ might not have been initialized/g, "error: Variable used before being given a value")
+    .replace(/error: method .+ in class .+ cannot be applied/g, "error: Wrong number or type of arguments for this method")
+    .replace(/error: duplicate class/g, "error: You have two classes with the same name");
+}
+
+// ─── Default templates ────────────────────────────────────────────────────────
+const TEMPLATES = {
+  "HelloWorld": `public class HelloWorld {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+        System.out.println("Welcome to DroidJ!");
+    }
+}`,
+  "Calculator": `import java.util.Scanner;
+
+public class Calculator {
+    public static void main(String[] args) {
+        Scanner sc = new Scanner(System.in);
+        System.out.print("Enter first number: ");
+        double a = sc.nextDouble();
+        System.out.print("Enter second number: ");
+        double b = sc.nextDouble();
+        System.out.println("Sum: " + (a + b));
+        System.out.println("Difference: " + (a - b));
+        System.out.println("Product: " + (a * b));
+        if (b != 0) System.out.println("Quotient: " + (a / b));
+    }
+}`,
+  "Armstrong": `import java.util.Scanner;
+
+class Armstrong {
+    public static void main(String args[]) {
+        Scanner sc = new Scanner(System.in);
+        System.out.print("Enter a number: ");
+        int n = sc.nextInt();
+        int original = n, sum = 0;
+        while (n != 0) {
+            int digit = n % 10;
+            sum += digit * digit * digit;
+            n /= 10;
+        }
+        if (sum == original)
+            System.out.println(original + " is an Armstrong number!");
+        else
+            System.out.println(original + " is NOT an Armstrong number.");
+    }
+}`,
+  "Fibonacci": `public class Fibonacci {
+    public static void main(String[] args) {
+        int n = 10;
+        System.out.println("Fibonacci sequence (" + n + " terms):");
+        int a = 0, b = 1;
+        for (int i = 0; i < n; i++) {
+            System.out.print(a + (i < n-1 ? ", " : ""));
+            int temp = a + b;
+            a = b;
+            b = temp;
+        }
+        System.out.println();
+    }
+}`,
+  "OOP": `public class Animal {
+    private String name;
+    private String sound;
+
+    public Animal(String name, String sound) {
+        this.name = name;
+        this.sound = sound;
+    }
+
+    public void speak() {
+        System.out.println(name + " says: " + sound + "!");
+    }
+
+    public String getName() { return name; }
+
+    public static void main(String[] args) {
+        Animal dog = new Animal("Dog", "Woof");
+        Animal cat = new Animal("Cat", "Meow");
+        Animal cow = new Animal("Cow", "Moo");
+        dog.speak();
+        cat.speak();
+        cow.speak();
+    }
+}`,
+  "Patterns": `public class Patterns {
+    public static void main(String[] args) {
+        int n = 5;
+        System.out.println("Star Triangle:");
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= i; j++) System.out.print("* ");
+            System.out.println();
+        }
+        System.out.println("\\nNumber Pyramid:");
+        for (int i = 1; i <= n; i++) {
+            for (int j = 1; j <= i; j++) System.out.print(j + " ");
+            System.out.println();
+        }
+    }
+}`,
+};
+
+// ─── Keyboard shortcuts for mobile ───────────────────────────────────────────
+const SHORTCUTS = [
+  { label: "{ }", insert: "{}" }, { label: "( )", insert: "()" },
+  { label: "[ ]", insert: "[]" }, { label: ";", insert: ";" },
+  { label: "\"\"", insert: '""' }, { label: "//", insert: "//" },
+  { label: "->", insert: "->" }, { label: "++", insert: "++" },
+  { label: "&&", insert: "&&" }, { label: "||", insert: "||" },
+  { label: "!=", insert: "!=" }, { label: "==", insert: "==" },
+];
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function Toast({ items, onRemove }) {
+  return (
+    <div className="toast-stack">
+      {items.map(t => (
+        <div key={t.id} className={`toast toast-${t.type}`}>
+          <span className="toast-ico">
+            {t.type === "success" ? <Ic.Check /> : t.type === "error" ? <Ic.Close /> : <Ic.Info />}
+          </span>
+          <span className="toast-msg">{t.msg}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── File Drawer ──────────────────────────────────────────────────────────────
+function FileDrawer({ files, activeFile, onSelect, onDelete, onNewFile, onClose, onTemplate }) {
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  function handleCreate() {
+    const name = newName.trim().replace(/\.java$/, "");
+    if (!name) return;
+    onNewFile(name);
+    setNewName("");
+  }
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer-top">
+          <div className="drawer-title">
+            <span className="drawer-title-icon"><Ic.Files /></span>
+            <span>My Programs</span>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Ic.Close /></button>
+        </div>
+
+        <div className="drawer-section-label">YOUR FILES</div>
+        <div className="drawer-files">
+          {Object.keys(files).length === 0 && (
+            <div className="drawer-empty">No files yet. Create one below!</div>
+          )}
+          {Object.keys(files).map(name => (
+            <div key={name} className={`drawer-file ${name === activeFile ? "active" : ""}`}
+              onClick={() => { onSelect(name); onClose(); }}>
+              <span className="drawer-file-icon"><Ic.Code /></span>
+              <span className="drawer-file-name">{name}.java</span>
+              <button className="drawer-file-del" onClick={e => { e.stopPropagation(); onDelete(name); }}>
+                <Ic.Trash />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="drawer-new">
+          <input className="drawer-input" placeholder="NewClassName" value={newName}
+            onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleCreate()} />
+          <button className="drawer-create-btn" onClick={handleCreate}>
+            <Ic.Plus /> Create
+          </button>
+        </div>
+
+        <div className="drawer-section-label" style={{ marginTop: 12 }}>STARTER TEMPLATES</div>
+        <div className="drawer-templates">
+          {Object.keys(TEMPLATES).map(name => (
+            <button key={name} className="template-chip" onClick={() => { onTemplate(name); onClose(); }}>
+              <Ic.Files /><span>{name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Run History Panel ────────────────────────────────────────────────────────
+function HistoryPanel({ history, onClose, onLoad }) {
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer-top">
+          <div className="drawer-title">
+            <span className="drawer-title-icon"><Ic.History /></span>
+            <span>Run History</span>
+          </div>
+          <button className="icon-btn" onClick={onClose}><Ic.Close /></button>
+        </div>
+        {history.length === 0 && <div className="drawer-empty" style={{padding:"20px 16px"}}>No runs yet.</div>}
+        <div className="drawer-files">
+          {history.map((h, i) => (
+            <div key={i} className="history-item" onClick={() => { onLoad(h.code); onClose(); }}>
+              <div className="history-meta">
+                <span className={`history-badge ${h.success ? "ok" : "err"}`}>{h.success ? "OK" : "ERR"}</span>
+                <span className="history-name">{h.className}</span>
+                <span className="history-time">{new Date(h.ts).toLocaleTimeString()}</span>
+              </div>
+              <div className="history-preview">{h.code.slice(0, 60)}...</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Share Dialog ─────────────────────────────────────────────────────────────
+function ShareDialog({ code, onClose }) {
+  const encoded = btoa(unescape(encodeURIComponent(code)));
+  const url = `${window.location.origin}${window.location.pathname}?code=${encoded}`;
+  const [copied, setCopied] = useState(false);
+
+  function copy() {
+    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-top">
+          <span>Share Code</span>
+          <button className="icon-btn" onClick={onClose}><Ic.Close /></button>
+        </div>
+        <div className="modal-body">
+          <p className="modal-hint">Anyone with this link can open and run your code instantly.</p>
+          <div className="share-url">{url.length > 60 ? url.slice(0, 60) + "..." : url}</div>
+          <button className="share-copy-btn" onClick={copy}>
+            {copied ? <><Ic.Check /><span>Copied!</span></> : <><Ic.Copy /><span>Copy Link</span></>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Panel ───────────────────────────────────────────────────────────
+function SettingsPanel({ fontSize, onFontSize, theme, onTheme, onClose }) {
+  return (
+    <div className="drawer-overlay" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-top">
+          <span>Settings</span>
+          <button className="icon-btn" onClick={onClose}><Ic.Close /></button>
+        </div>
+        <div className="modal-body">
+          <div className="setting-row">
+            <span className="setting-label">Theme</span>
+            <button className="setting-toggle" onClick={() => onTheme(theme === "light" ? "dark" : "light")}>
+              <span className="setting-toggle-icon">{theme === "light" ? <Ic.Moon /> : <Ic.Sun />}</span>
+              <span>{theme === "light" ? "Dark Mode" : "Light Mode"}</span>
+            </button>
+          </div>
+          <div className="setting-row">
+            <span className="setting-label">Font Size: {fontSize}px</span>
+            <div className="font-btns">
+              <button className="font-btn" onClick={() => onFontSize(Math.max(10, fontSize - 1))}>A−</button>
+              <button className="font-btn" onClick={() => onFontSize(14)}>Reset</button>
+              <button className="font-btn" onClick={() => onFontSize(Math.min(22, fontSize + 1))}>A+</button>
+            </div>
+          </div>
+
+          <div className="dev-card">
+            <div className="dev-card-top">
+              <div className="dev-info">
+                <div className="dev-name">Divyansh Goyal</div>
+                <div className="dev-role">Developer</div>
+              </div>
+            </div>
+            <div className="dev-bio">
+              Built DroidJ so every student can practice Java — even without a laptop.
+            </div>
+            <div className="dev-links">
+              <a className="dev-link" href="https://github.com/vinksgoyal" target="_blank" rel="noreferrer">
+                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+                github.com/vinksgoyal
+              </a>
+            </div>
+          </div>
+
+          <div className="app-version">DroidJ v1.0 · MIT License · Open Source</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Home Page (Project Dashboard) ────────────────────────────────────────────
+function HomePage({ files, onOpenFile, onDeleteFile, onCreateNew }) {
+  const fileList = Object.entries(files);
+  return (
+    <div className="home-container">
+      <div className="home-header">
+        <h2><Ic.Project /> Your Projects</h2>
+        <button className="home-new-btn" onClick={onCreateNew}>
+          <Ic.Plus /> New Project
+        </button>
+      </div>
+      {fileList.length === 0 && (
+        <div className="home-empty">
+          <Ic.Files />
+          <p>No projects yet. Click “New Project” to start coding!</p>
+        </div>
+      )}
+      <div className="home-grid">
+        {fileList.map(([name, src]) => (
+          <div key={name} className="project-card">
+            <div className="project-icon"><Ic.Code /></div>
+            <div className="project-info">
+              <div className="project-name">{name}.java</div>
+              <div className="project-meta">{src.split('\n').length} lines</div>
+            </div>
+            <div className="project-actions">
+              <button className="project-open" onClick={() => onOpenFile(name)}>
+                <Ic.Code /> Open
+              </button>
+              <button className="project-del" onClick={() => onDeleteFile(name)}>
+                <Ic.Trash />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ─────────────────────────────────────────────────────────────────
+export default function App() {
+  // Shared state from URL
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const c = p.get("code");
+    if (c) {
+      try {
+        const decoded = decodeURIComponent(escape(atob(c)));
+        const className = (decoded.match(/public\s+class\s+(\w+)/) || decoded.match(/\bclass\s+(\w+)/))?.[1] || "Shared";
+        setFiles(f => ({ ...f, [className]: decoded }));
+        setActiveFile(className);
+        setCode(decoded);
+        setView("editor");
+        window.history.replaceState({}, "", window.location.pathname);
+      } catch {}
+    }
+  }, []);
+
+  const initFiles = () => {
+    const saved = get(SK.files, null);
+    if (saved && Object.keys(saved).length > 0) return saved;
+    return { HelloWorld: TEMPLATES.HelloWorld };
+  };
+  const initActive = () => get(SK.active, "HelloWorld");
+
+  const [files, setFiles] = useState(initFiles);
+  const [activeFile, setActiveFile] = useState(initActive);
+  const [code, setCode] = useState(() => {
+    const f = get(SK.files, null);
+    const a = get(SK.active, "HelloWorld");
+    return f?.[a] || TEMPLATES.HelloWorld;
+  });
+  const [output, setOutput] = useState([]);
+  const [isRunning, setIsRunning] = useState(false);
+  const [status, setStatus] = useState(null); // null | "ok" | "error"
+  const [tab, setTab] = useState("editor"); // editor | output
+  const [theme, setTheme] = useState(() => get(SK.theme, "light"));
+  const [fontSize, setFontSize] = useState(() => get(SK.fontSize, 14));
+  const [stdinInput, setStdinInput] = useState("");
+  const [needsInput, setNeedsInput] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [drawer, setDrawer] = useState(null); // null | "files" | "history" | "share" | "settings"
+  const [saveIndicator, setSaveIndicator] = useState("saved"); // "saved" | "unsaved" | "saving"
+  const [history, setHistory] = useState(() => get(SK.history, []));
+  const [lineCount, setLineCount] = useState(1);
+  const [copied, setCopied] = useState(false);
+  const [view, setView] = useState("home"); // "home" or "editor"
+  const editorRef = useRef(null);
+  const outputRef = useRef(null);
+  const saveTimerRef = useRef(null);
+
+  // Persist theme and fontSize
+  useEffect(() => { set(SK.theme, theme); document.documentElement.setAttribute("data-theme", theme); }, [theme]);
+  useEffect(() => { set(SK.fontSize, fontSize); }, [fontSize]);
+
+  // Auto-detect if code needs stdin
+  useEffect(() => { setNeedsInput(/Scanner\s*\(/.test(code) || /BufferedReader\s*\(/.test(code)); }, [code]);
+
+  // Scroll output to bottom
+  useEffect(() => { if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight; }, [output]);
+
+  // Auto-save with debounce
+  function handleCodeChange(val) {
+    const v = val || "";
+    setCode(v);
+    setLineCount(v.split("\n").length);
+    setSaveIndicator("unsaved");
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      const updated = { ...files, [activeFile]: v };
+      setFiles(updated);
+      set(SK.files, updated);
+      setSaveIndicator("saved");
+    }, 800);
+  }
+
+  function addToast(msg, type = "info") {
+    const id = Date.now();
+    setToasts(t => [...t, { id, msg, type }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3000);
+  }
+
+  function extractClass(src) {
+    const pub = src.match(/public\s+class\s+(\w+)/);
+    if (pub) return pub[1];
+    const any = src.match(/\bclass\s+(\w+)/);
+    return any ? any[1] : "Main";
+  }
+
+  // ── Run ──────────────────────────────────────────────────────────────────
+  async function runCode() {
+    if (isRunning) return;
+
+    // Save first
+    const updated = { ...files, [activeFile]: code };
+    setFiles(updated);
+    set(SK.files, updated);
+    setSaveIndicator("saved");
+
+    setIsRunning(true);
+    setOutput([{ text: `Running ${activeFile}.java...`, type: "sys" }]);
+    setStatus(null);
+    setTab("output");
+
+    const className = extractClass(code);
+
+    try {
+      const res = await fetch(`${API}/api/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code, input: stdinInput }),
+      });
+      const data = await res.json();
+      const lines = [];
+
+      if (data.phase === "compile" && !data.success) {
+        setStatus("error");
+        const friendly = translateError(data.error || "");
+        const errLines = friendly.split("\n").filter(l => l.trim());
+        errLines.forEach(l => lines.push({ text: l, type: "error" }));
+        addToast("Compile error — check output", "error");
+      } else {
+        if (data.output) {
+          data.output.split("\n").forEach(l => lines.push({ text: l, type: "out" }));
+        }
+        if (data.error) {
+          translateError(data.error).split("\n").filter(l => l.trim()).forEach(l => lines.push({ text: l, type: "error" }));
+        }
+        setStatus(data.success ? "ok" : "error");
+        if (data.success) addToast("Ran successfully!", "success");
+      }
+
+      if (lines.length === 0) lines.push({ text: "(no output)", type: "dim" });
+      setOutput(lines);
+
+      // Save to history
+      const entry = { className, code, success: data.success, ts: Date.now() };
+      const newHist = [entry, ...history].slice(0, 15);
+      setHistory(newHist);
+      set(SK.history, newHist);
+
+    } catch {
+      setOutput([{ text: "Cannot reach DroidJ server.", type: "error" },
+        { text: "Start it: cd ~/droidj/server && node index.js", type: "dim" }]);
+      setStatus("error");
+    }
+    setIsRunning(false);
+  }
+
+  // ── File ops ──────────────────────────────────────────────────────────────
+  function switchFile(name) {
+    const current = { ...files, [activeFile]: code };
+    setFiles(current);
+    set(SK.files, current);
+    setActiveFile(name);
+    set(SK.active, name);
+    setCode(current[name] || "");
+    setOutput([]);
+    setStatus(null);
+    setSaveIndicator("saved");
+    setView("editor");
+  }
+
+  function createFile(name) {
+    if (!name || !/^[A-Za-z]\w*$/.test(name)) { addToast("Invalid class name", "error"); return; }
+    const className = name.charAt(0).toUpperCase() + name.slice(1);
+    if (files[className]) { addToast("File already exists", "error"); return; }
+    const newCode = `public class ${className} {\n    public static void main(String[] args) {\n        // Write your code here\n        System.out.println("Hello from ${className}!");\n    }\n}`;
+    const updated = { ...files, [activeFile]: code, [className]: newCode };
+    setFiles(updated);
+    set(SK.files, updated);
+    setActiveFile(className);
+    set(SK.active, className);
+    setCode(newCode);
+    setOutput([]);
+    setStatus(null);
+    setView("editor");
+    addToast(`Created ${className}.java`, "success");
+  }
+
+  function deleteFile(name) {
+    if (Object.keys(files).length === 1) { addToast("Can't delete the only file", "error"); return; }
+    const updated = { ...files };
+    delete updated[name];
+    setFiles(updated);
+    set(SK.files, updated);
+    if (activeFile === name) {
+      const first = Object.keys(updated)[0];
+      setActiveFile(first);
+      set(SK.active, first);
+      setCode(updated[first]);
+    }
+    // If we are on home page, just refresh the list; if on editor and file is deleted, stay on editor with new active file
+    addToast(`Deleted ${name}.java`, "error");
+  }
+
+  function loadTemplate(name) {
+    const tCode = TEMPLATES[name];
+    const className = name;
+    const updated = { ...files, [activeFile]: code, [className]: tCode };
+    setFiles(updated);
+    set(SK.files, updated);
+    setActiveFile(className);
+    set(SK.active, className);
+    setCode(tCode);
+    setOutput([]);
+    setStatus(null);
+    setView("editor");
+    addToast(`Loaded template: ${name}`, "success");
+  }
+
+  // ── Shortcut insert ───────────────────────────────────────────────────────
+  function insertShortcut(text) {
+    if (editorRef.current) {
+      const editor = editorRef.current;
+      const selection = editor.getSelection();
+      const id = { major: 1, minor: 1 };
+      const op = { identifier: id, range: selection, text, forceMoveMarkers: true };
+      editor.executeEdits("shortcut", [op]);
+      editor.focus();
+    }
+  }
+
+  // ── Copy output ───────────────────────────────────────────────────────────
+  function copyOutput() {
+    const text = output.map(l => l.text).join("\n");
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+
+  const monacoTheme = theme === "dark" ? "vs-dark" : "vs";
+
+  // ── Home page helpers ─────────────────────────────────────────────────────
+  const openFileFromHome = (name) => {
+    switchFile(name);
+    setView("editor");
+  };
+
+  const goToNewProject = () => {
+    setDrawer("files");
+  };
+
+  return (
+    <div className="app" data-theme={theme}>
+      {/* ── TOP HEADER ── */}
+      <header className="header">
+        <div className="header-left">
+          <button className="icon-btn menu-btn" onClick={() => setDrawer("files")} aria-label="Files">
+            <Ic.Files />
+          </button>
+          <div className="brand" onClick={() => setView("home")} style={{ cursor: "pointer" }}>
+            <span className="brand-hex"><Ic.Home /></span>
+            <span className="brand-name">DroidJ</span>
+          </div>
+          {view === "editor" && (
+            <div className="file-pill">
+              <span className="file-pill-name">{activeFile}.java</span>
+              <span className={`save-dot ${saveIndicator}`} title={saveIndicator} />
+            </div>
+          )}
+        </div>
+        <div className="header-right">
+          <span className={`status-chip ${status || ""}`}>
+            {status === "ok" && <><Ic.Check /><span>OK</span></>}
+            {status === "error" && <><Ic.Close /><span>ERR</span></>}
+          </span>
+          <button className="icon-btn" onClick={() => setDrawer("settings")} aria-label="Settings">
+            {theme === "light" ? <Ic.Moon /> : <Ic.Sun />}
+          </button>
+          <button className="icon-btn" onClick={() => setDrawer("history")} aria-label="History">
+            <Ic.History />
+          </button>
+          <button className="icon-btn" onClick={() => setDrawer("share")} aria-label="Share">
+            <Ic.Share />
+          </button>
+        </div>
+      </header>
+
+      {/* ── TAB BAR (only visible in editor view) ── */}
+      {view === "editor" && (
+        <div className="tab-bar">
+          <button className={`tab-btn ${tab === "editor" ? "active" : ""}`} onClick={() => setTab("editor")}>
+            <Ic.Code /><span>Editor</span>
+          </button>
+          <button className={`tab-btn ${tab === "output" ? "active" : ""}`} onClick={() => setTab("output")}>
+            <Ic.Term />
+            <span>Output</span>
+            {status && <span className={`tab-dot ${status}`} />}
+          </button>
+          <div className="tab-spacer" />
+          <div className="line-count">{lineCount} lines</div>
+        </div>
+      )}
+
+      {/* ── MAIN CONTENT ── */}
+      <div className="content">
+        {view === "home" ? (
+          <HomePage
+            files={files}
+            onOpenFile={openFileFromHome}
+            onDeleteFile={deleteFile}
+            onCreateNew={goToNewProject}
+          />
+        ) : (
+          <>
+            {/* Editor pane */}
+            <div className={`editor-pane ${tab === "editor" ? "visible" : "hidden"}`}>
+              <Suspense fallback={<div className="pane-loading"><span className="loading-spinner" />Loading editor...</div>}>
+                <MonacoEditor
+                  height="100%"
+                  language="java"
+                  value={code}
+                  theme={monacoTheme}
+                  onChange={handleCodeChange}
+                  onMount={editor => {
+                    editorRef.current = editor;
+                    setLineCount(code.split("\n").length);
+                  }}
+                  options={{
+                    fontSize,
+                    fontFamily: "'DM Mono', 'Fira Code', monospace",
+                    minimap: { enabled: false },
+                    scrollBeyondLastLine: false,
+                    lineNumbers: "on",
+                    folding: true,
+                    automaticLayout: true,
+                    tabSize: 4,
+                    wordWrap: "on",
+                    quickSuggestions: { other: true, comments: false, strings: false },
+                    suggestOnTriggerCharacters: true,
+                    padding: { top: 10, bottom: 120 },
+                    cursorBlinking: "smooth",
+                    smoothScrolling: true,
+                    scrollbar: { vertical: "auto", horizontal: "auto" },
+                    renderLineHighlight: "line",
+                    bracketPairColorization: { enabled: true },
+                  }}
+                />
+              </Suspense>
+
+              {/* Mobile keyboard shortcut bar */}
+              <div className="shortcut-bar">
+                {SHORTCUTS.map(s => (
+                  <button key={s.label} className="shortcut-key" onClick={() => insertShortcut(s.insert)}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Output pane */}
+            <div className={`output-pane ${tab === "output" ? "visible" : "hidden"}`}>
+              <div className="output-toolbar">
+                <span className="output-toolbar-label">
+                  {status === "ok" ? "Program Output" : status === "error" ? "Errors" : "Terminal"}
+                </span>
+                <button className="icon-btn sm" onClick={copyOutput} title="Copy output">
+                  {copied ? <Ic.Check /> : <Ic.Copy />}
+                </button>
+                <button className="icon-btn sm" onClick={() => { setOutput([]); setStatus(null); }} title="Clear">
+                  <Ic.Clear />
+                </button>
+              </div>
+              <div className="output-body" ref={outputRef}>
+                {output.length === 0 && (
+                  <div className="output-empty">
+                    <div className="output-empty-icon"><Ic.Term /></div>
+                    <p>Run your code to see output here</p>
+                    <p className="output-empty-hint">Tap the Run button below</p>
+                  </div>
+                )}
+                {output.map((line, i) => (
+                  <div key={i} className={`output-line out-${line.type}`}>
+                    {line.type === "error" && <span className="err-marker">!</span>}
+                    <span>{line.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* ── STDIN INPUT BAR (only in editor view) ── */}
+      {view === "editor" && needsInput && (
+        <div className="stdin-bar">
+          <span className="stdin-label"><Ic.Term /></span>
+          <input className="stdin-input" placeholder="Program input (one value per line, e.g. 153)" value={stdinInput} onChange={e => setStdinInput(e.target.value)} />
+        </div>
+      )}
+
+      {/* ── BOTTOM ACTION BAR (only in editor view) ── */}
+      {view === "editor" && (
+        <div className="action-bar">
+          <button className={`run-btn ${isRunning ? "running" : ""}`} onClick={runCode} disabled={isRunning}>
+            <span className="run-btn-icon">{isRunning ? <Ic.Stop /> : <Ic.Run />}</span>
+            <span className="run-btn-label">{isRunning ? "Running..." : "Run"}</span>
+            {isRunning && <span className="run-spinner" />}
+          </button>
+
+          <button className="action-btn" onClick={() => { const u = { ...files, [activeFile]: code }; setFiles(u); set(SK.files, u); setSaveIndicator("saved"); addToast("Saved!", "success"); }}>
+            <Ic.Save />
+            <span>Save</span>
+          </button>
+
+          <button className="action-btn" onClick={() => setDrawer("files")}>
+            <Ic.Files />
+            <span>Files</span>
+          </button>
+
+          <button className="action-btn" onClick={() => setFontSize(s => s === 14 ? 16 : s === 16 ? 12 : 14)}>
+            <Ic.Font />
+            <span>{fontSize}px</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── DRAWERS & MODALS ── */}
+      {drawer === "files" && (
+        <FileDrawer files={files} activeFile={activeFile}
+          onSelect={switchFile} onDelete={deleteFile}
+          onNewFile={createFile} onClose={() => setDrawer(null)}
+          onTemplate={loadTemplate} />
+      )}
+      {drawer === "history" && (
+        <HistoryPanel history={history} onClose={() => setDrawer(null)}
+          onLoad={c => { setCode(c); setView("editor"); setTab("editor"); addToast("Code loaded from history", "info"); }} />
+      )}
+      {drawer === "share" && <ShareDialog code={code} onClose={() => setDrawer(null)} />}
+      {drawer === "settings" && (
+        <SettingsPanel fontSize={fontSize} onFontSize={fs => { setFontSize(fs); set(SK.fontSize, fs); }}
+          theme={theme} onTheme={t => { setTheme(t); set(SK.theme, t); }}
+          onClose={() => setDrawer(null)} />
+      )}
+
+      {/* ── TOASTS ── */}
+      <Toast items={toasts} />
+    </div>
+  );
+}
