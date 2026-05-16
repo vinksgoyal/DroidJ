@@ -76,4 +76,10 @@ app.post("/api/run", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+
+setInterval(() => {
+  fetch("https://droidj-5op8.onrender.com/").catch(() => {});
+}, 14 * 60 * 1000);
+
 app.listen(PORT, () => console.log(`\n✅ DroidJ server → http://localhost:${PORT}\n`));
